@@ -3,6 +3,78 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const userMenuButton = document.getElementById("user-menu-button");
+  const userStatus = document.getElementById("user-status");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const closeLogin = document.getElementById("close-login");
+
+  let teacher = null;
+
+  function showMessage(text, className) {
+    messageDiv.textContent = text;
+    messageDiv.className = className;
+    messageDiv.classList.remove("hidden");
+    setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+  }
+
+  function updateAdminControls() {
+    if (teacher) {
+      userStatus.textContent = teacher.username;
+      signupForm.classList.remove("hidden");
+    } else {
+      userStatus.textContent = "Teacher login";
+      signupForm.classList.add("hidden");
+    }
+  }
+
+  userMenuButton.addEventListener("click", () => {
+    if (teacher) {
+      teacher = null;
+      updateAdminControls();
+      fetchActivities();
+      showMessage("Logged out", "info");
+      return;
+    }
+    loginModal.classList.remove("hidden");
+  });
+
+  closeLogin.addEventListener("click", () => loginModal.classList.add("hidden"));
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventEvent?.();
+    event.preventDefault();
+
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch(
+        `/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+        { method: "POST" }
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        loginMessage.textContent = result.detail || "Login failed";
+        loginMessage.className = "error";
+        loginMessage.classList.remove("hidden");
+        return;
+      }
+
+      teacher = { username, password };
+      loginModal.classList.add("hidden");
+      loginForm.reset();
+      loginMessage.classList.add("hidden");
+      updateAdminControls();
+      fetchActivities();
+    } catch (error) {
+      loginMessage.textContent = "Unable to log in";
+      loginMessage.className = "error";
+      loginMessage.classList.remove("hidden");
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
+        // Create participants HTML with delete icons for logged-in teachers
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -30,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${teacher ? `<button class="delete-btn" data-activity="${name}" data-email="${email}" aria-label="Unregister ${email}">❌</button>` : ""}</li>`
                   )
                   .join("")}
               </ul>
@@ -77,7 +149,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch(
         `/activities/${encodeURIComponent(
           activity
-        )}/unregister?email=${encodeURIComponent(email)}`,
+        )}/unregister?email=${encodeURIComponent(email)}&username=${encodeURIComponent(teacher.username)}&password=${encodeURIComponent(teacher.password)}`,
         {
           method: "DELETE",
         }
@@ -121,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch(
         `/activities/${encodeURIComponent(
           activity
-        )}/signup?email=${encodeURIComponent(email)}`,
+        )}/signup?email=${encodeURIComponent(email)}&username=${encodeURIComponent(teacher.username)}&password=${encodeURIComponent(teacher.password)}`,
         {
           method: "POST",
         }

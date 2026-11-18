@@ -8,6 +8,7 @@ for extracurricular activities at Mergington High School.
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+import json
 import os
 from pathlib import Path
 
@@ -18,6 +19,43 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+teachers_file = Path(__file__).parent / "teachers.json"
+
+
+def load_teachers():
+    with open(teachers_file, "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    if isinstance(data, dict):
+        if "teachers" in data and isinstance(data["teachers"], list):
+            data = data["teachers"]
+        else:
+            return {
+                username: credentials if isinstance(credentials, str)
+                else credentials.get("password")
+                for username, credentials in data.items()
+            }
+
+    if isinstance(data, list):
+        return {
+            teacher["username"]: teacher["password"]
+            for teacher in data
+            if isinstance(teacher, dict)
+            and "username" in teacher
+            and "password" in teacher
+        }
+
+    return {}
+
+
+def require_admin(username: str | None, password: str | None):
+    teachers = load_teachers()
+    if not username or not password or teachers.get(username) != password:
+        raise HTTPException(
+            status_code=401,
+            detail="Teacher authentication required",
+        )
 
 # In-memory activity database
 activities = {
@@ -88,9 +126,23 @@ def get_activities():
     return activities
 
 
+@app.post("/login")
+def login(username: str, password: str):
+    """Validate a teacher username and password."""
+    require_admin(username, password)
+    return {"message": "Login successful", "username": username}
+
+
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+def signup_for_activity(
+    activity_name: str,
+    email: str,
+    username: str | None = None,
+    password: str | None = None,
+):
     """Sign up a student for an activity"""
+    require_admin(username, password)
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -111,8 +163,15 @@ def signup_for_activity(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
+def unregister_from_activity(
+    activity_name: str,
+    email: str,
+    username: str | None = None,
+    password: str | None = None,
+):
     """Unregister a student from an activity"""
+    require_admin(username, password)
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
